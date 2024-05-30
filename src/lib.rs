@@ -1,30 +1,27 @@
 use clap::Parser;
 
 use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-//use log::info;
+use crossterm::event;
 use ratatui::prelude::{Backend, Buffer, Color, Constraint, Layout, Rect, Style, Terminal, Widget};
 use ratatui::widgets::{Block, Borders};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::time::Duration;
-use tui_textarea::TextArea;
+use tui_textarea::{CursorMove, Input, Key, Scrolling, TextArea};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
 pub struct Config {
-    //#[arg(default_value_t = String::from("File1"))]
     pub file1: String,
-    //#[arg(default_value_t = String::from("File2"))]
     pub file2: String,
 }
 
 #[derive(Debug, Default)]
 
-pub struct App {
+pub struct App<'a> {
     state: AppState,
-    file1_widget: FileWidget,
-    file2_widget: FileWidget,
+    file1_widget: FileWidget<'a>,
+    file2_widget: FileWidget<'a>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -34,7 +31,7 @@ enum AppState {
     Quit, // The user has requested the app to quit
 }
 
-impl App {
+impl App<'_> {
     pub fn new(config: &Config) -> Self {
         Self {
             state: AppState::Running,
@@ -57,25 +54,119 @@ impl App {
     }
 
     /// Handle any events that have occurred since the last time the app was rendered.
-    ///
-    /// Currently, this only handles the q key to quit the app.
     fn handle_events(&mut self) -> Result<()> {
-        // Ensure that the app only blocks for a period that allows the app to render at
-        // approximately 60 FPS (this doesn't account for the time to render the frame, and will
-        // also update the app immediately any time an event occurs)
         let timeout = Duration::from_secs_f32(1.0 / 60.0);
+        let textarea = &mut self.file1_widget.textarea;
         if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                    self.state = AppState::Quit;
-                };
+            if event::poll(std::time::Duration::from_millis(16))? {
+                let input = event::read()?.into();
+                match input {
+                    Input {
+                        key: Key::Char('q'),
+                        ..
+                    }
+                    | Input { key: Key::Esc, .. } => self.state = AppState::Quit,
+                    Input {
+                        key: Key::Char('h'),
+                        ..
+                    }
+                    | Input { key: Key::Left, .. } => textarea.move_cursor(CursorMove::Back),
+                    Input {
+                        key: Key::Char('j'),
+                        ..
+                    }
+                    | Input { key: Key::Down, .. } => textarea.move_cursor(CursorMove::Down),
+                    Input {
+                        key: Key::Char('k'),
+                        ..
+                    }
+                    | Input { key: Key::Up, .. } => textarea.move_cursor(CursorMove::Up),
+                    Input {
+                        key: Key::Char('l'),
+                        ..
+                    }
+                    | Input {
+                        key: Key::Right, ..
+                    } => textarea.move_cursor(CursorMove::Forward),
+                    Input {
+                        key: Key::Char('w'),
+                        ..
+                    } => textarea.move_cursor(CursorMove::WordForward),
+                    Input {
+                        key: Key::Char('b'),
+                        ctrl: false,
+                        ..
+                    } => textarea.move_cursor(CursorMove::WordBack),
+                    Input {
+                        key: Key::Char('^'),
+                        ..
+                    } => textarea.move_cursor(CursorMove::Head),
+                    Input {
+                        key: Key::Char('$'),
+                        ..
+                    } => textarea.move_cursor(CursorMove::End),
+                    Input {
+                        key: Key::Char('g'),
+                        ctrl: false,
+                        ..
+                    }
+                    | Input { key: Key::Home, .. } => textarea.move_cursor(CursorMove::Top),
+                    Input {
+                        key: Key::Char('G'),
+                        ctrl: false,
+                        ..
+                    }
+                    | Input { key: Key::End, .. } => textarea.move_cursor(CursorMove::Bottom),
+                    Input {
+                        key: Key::Char('e'),
+                        ctrl: true,
+                        ..
+                    } => textarea.scroll((1, 0)),
+                    Input {
+                        key: Key::Char('y'),
+                        ctrl: true,
+                        ..
+                    } => textarea.scroll((-1, 0)),
+                    Input {
+                        key: Key::Char('d'),
+                        ctrl: true,
+                        ..
+                    } => textarea.scroll(Scrolling::HalfPageDown),
+                    Input {
+                        key: Key::Char('u'),
+                        ctrl: true,
+                        ..
+                    } => textarea.scroll(Scrolling::HalfPageUp),
+                    Input {
+                        key: Key::Char('f'),
+                        ctrl: true,
+                        ..
+                    }
+                    | Input {
+                        key: Key::PageDown, ..
+                    } => textarea.scroll(Scrolling::PageDown),
+                    Input {
+                        key: Key::Char('b'),
+                        ctrl: true,
+                        ..
+                    }
+                    | Input {
+                        key: Key::PageUp, ..
+                    } => textarea.scroll(Scrolling::PageUp),
+                    _ => (),
+                }
             }
+            // if let Event::Key(key) = event::read()? {
+            //     if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
+            //         self.state = AppState::Quit;
+            //     };
+            // }
         }
         Ok(())
     }
 }
 
-impl Widget for &mut App {
+impl Widget for &mut App<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         use Constraint::Min;
         let [file1_area, file2_area] = Layout::horizontal([Min(0), Min(0)]).areas(area);
@@ -86,44 +177,37 @@ impl Widget for &mut App {
 
 /// FileWidget
 #[derive(Debug, Default)]
-struct FileWidget {
-    filename: String,   // name of the log file to view
-    lines: Vec<String>, // lines of the log file
+struct FileWidget<'a> {
+    filename: String, // name of the log file to view
+    textarea: TextArea<'a>,
 }
 
-impl FileWidget {
+impl FileWidget<'_> {
     pub fn new(filename: &String) -> Self {
-        Self {
-            filename: filename.clone(),
-            lines: vec![],
-        }
-    }
-
-    fn setup_lines(&mut self) {
-        if self.lines.len() > 0 {
-            return;
-        }
-        let file = File::open(self.filename.clone()).expect("no such fool");
+        let file = File::open(filename.clone()).expect("no such file");
         let buf = BufReader::new(file);
-        self.lines = buf
+        let lines: Vec<String> = buf
             .lines()
             .map(|l| l.expect("Could not parse line"))
             .collect();
+
+        Self {
+            filename: filename.clone(),
+            textarea: TextArea::new(lines.clone()),
+        }
     }
 }
 
 /// Widget impl for `FileWidget`
-impl Widget for &mut FileWidget {
+impl Widget for &mut FileWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        self.setup_lines();
-        //Text::from(self.lines.join("\n")).render(area, buf);
-        let mut textarea = TextArea::from(self.lines.clone());
-        textarea.set_line_number_style(Style::default().fg(Color::DarkGray));
-        textarea.set_block(
+        self.textarea
+            .set_line_number_style(Style::default().fg(Color::DarkGray));
+        self.textarea.set_block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(self.filename.clone()),
         );
-        textarea.widget().render(area, buf);
+        self.textarea.widget().render(area, buf);
     }
 }
