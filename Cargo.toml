@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ratatui = { version = "0.26.3", features = ["crossterm", "all-widgets"] }
 clap = { version = "4.5.4", features = ["derive"] }
+crossterm = "0.27"
 env_logger = "0.11.3"
 log = "0.4.21"
-ratatui = "0.26.3"
