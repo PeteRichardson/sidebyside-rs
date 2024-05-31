@@ -2,7 +2,9 @@ use clap::Parser;
 
 use color_eyre::Result;
 use crossterm::event;
-use ratatui::prelude::{Backend, Buffer, Color, Constraint, Layout, Rect, Style, Terminal, Widget};
+use ratatui::prelude::{
+    Backend, Buffer, Color, Constraint, Layout, Modifier, Rect, Style, Terminal, Widget,
+};
 use ratatui::widgets::{Block, Borders};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -20,8 +22,8 @@ pub struct Config {
 
 pub struct App<'a> {
     state: AppState,
-    file1_widget: FileWidget<'a>,
-    file2_widget: FileWidget<'a>,
+    widgets: Vec<FileWidget<'a>>,
+    active_widget: usize,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -35,8 +37,11 @@ impl App<'_> {
     pub fn new(config: &Config) -> Self {
         Self {
             state: AppState::Running,
-            file1_widget: FileWidget::new(&config.file1),
-            file2_widget: FileWidget::new(&config.file2),
+            widgets: vec![
+                FileWidget::new(&config.file1),
+                FileWidget::new(&config.file2),
+            ],
+            active_widget: 0,
         }
     }
 
@@ -56,7 +61,7 @@ impl App<'_> {
     /// Handle any events that have occurred since the last time the app was rendered.
     fn handle_events(&mut self) -> Result<()> {
         let timeout = Duration::from_secs_f32(1.0 / 60.0);
-        let textarea = &mut self.file1_widget.textarea;
+        let textarea = &mut self.widgets[self.active_widget].textarea;
         if event::poll(timeout)? {
             if event::poll(std::time::Duration::from_millis(16))? {
                 let input = event::read()?.into();
@@ -66,6 +71,9 @@ impl App<'_> {
                         ..
                     }
                     | Input { key: Key::Esc, .. } => self.state = AppState::Quit,
+                    Input { key: Key::Tab, .. } => {
+                        self.active_widget = (self.active_widget + 1) % self.widgets.len();
+                    }
                     Input {
                         key: Key::Char('h'),
                         ..
@@ -138,14 +146,6 @@ impl App<'_> {
                         ..
                     } => textarea.scroll(Scrolling::HalfPageUp),
                     Input {
-                        key: Key::Char('f'),
-                        ctrl: true,
-                        ..
-                    }
-                    | Input {
-                        key: Key::PageDown, ..
-                    } => textarea.scroll(Scrolling::PageDown),
-                    Input {
                         key: Key::Char('b'),
                         ctrl: true,
                         ..
@@ -153,14 +153,34 @@ impl App<'_> {
                     | Input {
                         key: Key::PageUp, ..
                     } => textarea.scroll(Scrolling::PageUp),
+                    Input {
+                        key: Key::Char(' '),
+                        ..
+                    }
+                    | Input {
+                        key: Key::Enter, ..
+                    } => textarea.scroll(Scrolling::PageDown),
+                    // Input {
+                    //     key: Key::Char(' '),
+                    //     shift: true,
+                    //     ..
+                    // }
+                    // | Input {
+                    //     key: Key::Enter,
+                    //     shift: true,
+                    //     ..
+                    // } => textarea.scroll(Scrolling::PageUp),
+                    Input {
+                        key: Key::Char('f'),
+                        ctrl: true,
+                        ..
+                    }
+                    | Input {
+                        key: Key::PageDown, ..
+                    } => textarea.scroll(Scrolling::PageDown),
                     _ => (),
                 }
             }
-            // if let Event::Key(key) = event::read()? {
-            //     if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-            //         self.state = AppState::Quit;
-            //     };
-            // }
         }
         Ok(())
     }
@@ -169,9 +189,15 @@ impl App<'_> {
 impl Widget for &mut App<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         use Constraint::Min;
-        let [file1_area, file2_area] = Layout::horizontal([Min(0), Min(0)]).areas(area);
-        self.file1_widget.render(file1_area, buf);
-        self.file2_widget.render(file2_area, buf);
+        // calculate rects where widgets should be rendered
+        assert!(self.widgets.len() == 2);
+        let widget_areas: Vec<Rect> = Layout::horizontal([Min(0), Min(0)])
+            .areas::<2>(area)
+            .to_vec();
+        for (i, w) in self.widgets.iter_mut().enumerate() {
+            w.active = i == self.active_widget;
+            w.render(widget_areas[i], buf);
+        }
     }
 }
 
@@ -180,6 +206,7 @@ impl Widget for &mut App<'_> {
 struct FileWidget<'a> {
     filename: String, // name of the log file to view
     textarea: TextArea<'a>,
+    active: bool,
 }
 
 impl FileWidget<'_> {
@@ -194,6 +221,7 @@ impl FileWidget<'_> {
         Self {
             filename: filename.clone(),
             textarea: TextArea::new(lines.clone()),
+            active: false,
         }
     }
 }
@@ -203,6 +231,11 @@ impl Widget for &mut FileWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.textarea
             .set_line_number_style(Style::default().fg(Color::DarkGray));
+        let mut style = Style::default();
+        if self.active {
+            style = style.fg(Color::Green).add_modifier(Modifier::REVERSED);
+        }
+        self.textarea.set_cursor_line_style(style);
         self.textarea.set_block(
             Block::default()
                 .borders(Borders::ALL)
