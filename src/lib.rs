@@ -61,7 +61,6 @@ impl App<'_> {
     /// Handle any events that have occurred since the last time the app was rendered.
     fn handle_events(&mut self) -> Result<()> {
         let timeout = Duration::from_secs_f32(1.0 / 60.0);
-        let textarea = &mut self.widgets[self.active_widget].textarea;
         if event::poll(timeout)? {
             if event::poll(std::time::Duration::from_millis(16))? {
                 let input = event::read()?.into();
@@ -74,111 +73,8 @@ impl App<'_> {
                     Input { key: Key::Tab, .. } => {
                         self.active_widget = (self.active_widget + 1) % self.widgets.len();
                     }
-                    Input {
-                        key: Key::Char('h'),
-                        ..
-                    }
-                    | Input { key: Key::Left, .. } => textarea.move_cursor(CursorMove::Back),
-                    Input {
-                        key: Key::Char('j'),
-                        ..
-                    }
-                    | Input { key: Key::Down, .. } => textarea.move_cursor(CursorMove::Down),
-                    Input {
-                        key: Key::Char('k'),
-                        ..
-                    }
-                    | Input { key: Key::Up, .. } => textarea.move_cursor(CursorMove::Up),
-                    Input {
-                        key: Key::Char('l'),
-                        ..
-                    }
-                    | Input {
-                        key: Key::Right, ..
-                    } => textarea.move_cursor(CursorMove::Forward),
-                    Input {
-                        key: Key::Char('w'),
-                        ..
-                    } => textarea.move_cursor(CursorMove::WordForward),
-                    Input {
-                        key: Key::Char('b'),
-                        ctrl: false,
-                        ..
-                    } => textarea.move_cursor(CursorMove::WordBack),
-                    Input {
-                        key: Key::Char('^'),
-                        ..
-                    } => textarea.move_cursor(CursorMove::Head),
-                    Input {
-                        key: Key::Char('$'),
-                        ..
-                    } => textarea.move_cursor(CursorMove::End),
-                    Input {
-                        key: Key::Char('g'),
-                        ctrl: false,
-                        ..
-                    }
-                    | Input { key: Key::Home, .. } => textarea.move_cursor(CursorMove::Top),
-                    Input {
-                        key: Key::Char('G'),
-                        ctrl: false,
-                        ..
-                    }
-                    | Input { key: Key::End, .. } => textarea.move_cursor(CursorMove::Bottom),
-                    Input {
-                        key: Key::Char('e'),
-                        ctrl: true,
-                        ..
-                    } => textarea.scroll((1, 0)),
-                    Input {
-                        key: Key::Char('y'),
-                        ctrl: true,
-                        ..
-                    } => textarea.scroll((-1, 0)),
-                    Input {
-                        key: Key::Char('d'),
-                        ctrl: true,
-                        ..
-                    } => textarea.scroll(Scrolling::HalfPageDown),
-                    Input {
-                        key: Key::Char('u'),
-                        ctrl: true,
-                        ..
-                    } => textarea.scroll(Scrolling::HalfPageUp),
-                    Input {
-                        key: Key::Char('b'),
-                        ctrl: true,
-                        ..
-                    }
-                    | Input {
-                        key: Key::PageUp, ..
-                    } => textarea.scroll(Scrolling::PageUp),
-                    Input {
-                        key: Key::Char(' '),
-                        ..
-                    }
-                    | Input {
-                        key: Key::Enter, ..
-                    } => textarea.scroll(Scrolling::PageDown),
-                    // Input {
-                    //     key: Key::Char(' '),
-                    //     shift: true,
-                    //     ..
-                    // }
-                    // | Input {
-                    //     key: Key::Enter,
-                    //     shift: true,
-                    //     ..
-                    // } => textarea.scroll(Scrolling::PageUp),
-                    Input {
-                        key: Key::Char('f'),
-                        ctrl: true,
-                        ..
-                    }
-                    | Input {
-                        key: Key::PageDown, ..
-                    } => textarea.scroll(Scrolling::PageDown),
-                    _ => (),
+
+                    _ => self.widgets[self.active_widget].handle_events(input)?,
                 }
             }
         }
@@ -223,6 +119,117 @@ impl FileWidget<'_> {
             textarea: TextArea::new(lines.clone()),
             active: false,
         }
+    }
+
+    fn handle_events(&mut self, input: Input) -> Result<()> {
+        match input {
+            Input {
+                key: Key::Char('h'),
+                ..
+            }
+            | Input { key: Key::Left, .. } => self.textarea.move_cursor(CursorMove::Back),
+            Input {
+                key: Key::Char('j'),
+                ..
+            }
+            | Input { key: Key::Down, .. } => self.textarea.move_cursor(CursorMove::Down),
+            Input {
+                key: Key::Char('k'),
+                ..
+            }
+            | Input { key: Key::Up, .. } => self.textarea.move_cursor(CursorMove::Up),
+            Input {
+                key: Key::Char('l'),
+                ..
+            }
+            | Input {
+                key: Key::Right, ..
+            } => self.textarea.move_cursor(CursorMove::Forward),
+            Input {
+                key: Key::Char('w'),
+                ..
+            } => self.textarea.move_cursor(CursorMove::WordForward),
+            Input {
+                key: Key::Char('b'),
+                ctrl: false,
+                ..
+            } => self.textarea.move_cursor(CursorMove::WordBack),
+            Input {
+                key: Key::Char('^'),
+                ..
+            } => self.textarea.move_cursor(CursorMove::Head),
+            Input {
+                key: Key::Char('$'),
+                ..
+            } => self.textarea.move_cursor(CursorMove::End),
+            Input {
+                key: Key::Char('g'),
+                ctrl: false,
+                ..
+            }
+            | Input { key: Key::Home, .. } => self.textarea.move_cursor(CursorMove::Top),
+            Input {
+                key: Key::Char('G'),
+                ctrl: false,
+                ..
+            }
+            | Input { key: Key::End, .. } => self.textarea.move_cursor(CursorMove::Bottom),
+            Input {
+                key: Key::Char('e'),
+                ctrl: true,
+                ..
+            } => self.textarea.scroll((1, 0)),
+            Input {
+                key: Key::Char('y'),
+                ctrl: true,
+                ..
+            } => self.textarea.scroll((-1, 0)),
+            Input {
+                key: Key::Char('d'),
+                ctrl: true,
+                ..
+            } => self.textarea.scroll(Scrolling::HalfPageDown),
+            Input {
+                key: Key::Char('u'),
+                ctrl: true,
+                ..
+            } => self.textarea.scroll(Scrolling::HalfPageUp),
+            Input {
+                key: Key::Char('b'),
+                ctrl: true,
+                ..
+            }
+            | Input {
+                key: Key::PageUp, ..
+            } => self.textarea.scroll(Scrolling::PageUp),
+            Input {
+                key: Key::Char(' '),
+                ..
+            }
+            | Input {
+                key: Key::Enter, ..
+            } => self.textarea.scroll(Scrolling::PageDown),
+            // Input {
+            //     key: Key::Char(' '),
+            //     shift: true,
+            //     ..
+            // }
+            // | Input {
+            //     key: Key::Enter,
+            //     shift: true,
+            //     ..
+            // } => textarea.scroll(Scrolling::PageUp),
+            Input {
+                key: Key::Char('f'),
+                ctrl: true,
+                ..
+            }
+            | Input {
+                key: Key::PageDown, ..
+            } => self.textarea.scroll(Scrolling::PageDown),
+            _ => (),
+        }
+        Ok(())
     }
 }
 
