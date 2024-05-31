@@ -11,14 +11,6 @@ use ratatui::{backend::Backend, prelude::CrosstermBackend, terminal::Terminal};
 use sidebyside::{App, Config};
 use std::{io, panic};
 
-fn setup_logging() {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
-        .format_target(false)
-        .format_timestamp(None)
-        .init();
-}
-
 fn main() -> Result<()> {
     install_error_hooks()?;
 
@@ -31,6 +23,34 @@ fn main() -> Result<()> {
     restore_terminal()?;
 
     Ok(())
+}
+
+//===================================================================================
+
+/// Install `color_eyre` panic and error hooks
+///
+/// The hooks restore the terminal to a usable state before printing the error message.
+fn install_error_hooks() -> Result<()> {
+    let (panic, error) = HookBuilder::default().into_hooks();
+    let panic = panic.into_panic_hook();
+    let error = error.into_eyre_hook();
+    eyre::set_hook(Box::new(move |e| {
+        let _ = restore_terminal();
+        error(e)
+    }))?;
+    panic::set_hook(Box::new(move |info| {
+        let _ = restore_terminal();
+        panic(info);
+    }));
+    Ok(())
+}
+
+fn setup_logging() {
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Debug)
+        .format_target(false)
+        .format_timestamp(None)
+        .init();
 }
 
 fn init_terminal() -> Result<Terminal<impl Backend>> {
@@ -49,23 +69,5 @@ fn restore_terminal() -> Result<()> {
     let mut stdout = io::stdout();
     execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
     // terminal.show_cursor()?;
-    Ok(())
-}
-
-/// Install `color_eyre` panic and error hooks
-///
-/// The hooks restore the terminal to a usable state before printing the error message.
-fn install_error_hooks() -> Result<()> {
-    let (panic, error) = HookBuilder::default().into_hooks();
-    let panic = panic.into_panic_hook();
-    let error = error.into_eyre_hook();
-    eyre::set_hook(Box::new(move |e| {
-        let _ = restore_terminal();
-        error(e)
-    }))?;
-    panic::set_hook(Box::new(move |info| {
-        let _ = restore_terminal();
-        panic(info);
-    }));
     Ok(())
 }
