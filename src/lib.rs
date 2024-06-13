@@ -58,27 +58,25 @@ impl App<'_> {
     fn handle_events(&mut self) -> Result<()> {
         let timeout = Duration::from_secs_f32(1.0 / 60.0);
         if event::poll(timeout)? {
-            if event::poll(std::time::Duration::from_millis(16))? {
-                let input = event::read()?.into();
-                match input {
-                    Input {
-                        key: Key::Char('q'),
-                        ..
-                    }
-                    | Input { key: Key::Esc, .. } => self.state = AppState::Quit,
-                    Input { key: Key::Tab, .. } => {
-                        self.active_widget = (self.active_widget + 1) % self.widgets.len();
-                    }
-
-                    _ => self.widgets[self.active_widget].handle_events(input)?,
+            let input = event::read()?.into();
+            match input {
+                Input {
+                    key: Key::Char('q'),
+                    ..
                 }
+                | Input { key: Key::Esc, .. } => self.state = AppState::Quit,
+                Input { key: Key::Tab, .. } => {
+                    self.active_widget = (self.active_widget + 1) % self.widgets.len();
+                }
+
+                _ => self.widgets[self.active_widget].handle_events(input)?,
             }
         }
         Ok(())
     }
 }
 
-impl Widget for &mut App<'_> {
+impl<'a> Widget for &mut App<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         use Constraint::Min;
         // calculate rects where widgets should be rendered

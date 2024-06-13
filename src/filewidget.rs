@@ -16,8 +16,8 @@ pub struct FileWidget<'a> {
 }
 
 impl FileWidget<'_> {
-    pub fn new(filename: &String) -> Self {
-        let file = File::open(filename.clone()).expect("no such file");
+    pub fn new(filename: &str) -> Self {
+        let file = File::open(filename).expect("no such file");
         let buf = BufReader::new(file);
         let lines: Vec<String> = buf
             .lines()
@@ -25,7 +25,7 @@ impl FileWidget<'_> {
             .collect();
 
         Self {
-            filename: filename.clone(),
+            filename: filename.to_string(),
             textarea: TextArea::new(lines.clone()),
             active: false,
         }
